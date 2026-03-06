@@ -1,16 +1,23 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+    "bufio"
+	"os"
+	"strings"
+)
 
 func main() {
-    var input string
+    scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("Welcome to StorageEngine\n")
 	for {
 		fmt.Print("> ")
-        fmt.Scanf("%s", &input)
+        scanner.Scan()
+		input := strings.TrimSpace(scanner.Text())
         if input == ".exit" {
 		    fmt.Println("Exiting...")
 		    break
 	    }
+		fmt.Println("Unrecognized command:", input)
     }
 }
