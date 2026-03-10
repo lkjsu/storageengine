@@ -1,17 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-    "bufio"
 	"os"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 type Row struct {
 	id       int64
 	username [32]byte
 	email    [255]byte
+}
+
+type Table struct {
+	numRows int
+	pages    [100][]byte
 }
 
 /* Write a function that can distinguish between meta commands and SQL commands */
@@ -25,13 +30,13 @@ func processSelectCommand(input string) {	// This is a very basic parser for the
 	fmt.Printf("Parsed SELECT command: \n")
 }
 
-func processInsertCommand(input string) {
+func processInsertCommand(input string) []byte {
 	// This is a very basic parser for the INSERT command. Assumes a single table
 	// It assumes the format: INSERT value1, value2, ...
 	parts := strings.SplitN(input, " ", 2)
 	if len(parts) < 2 {
 		fmt.Println("Invalid INSERT command format.")
-		return
+		return []byte{}
 	}
 	valuesPart := parts[1]
 	values := strings.Split(valuesPart, ",")
@@ -59,9 +64,7 @@ func processInsertCommand(input string) {
 	}
 
 	pageSize := 4096
-	rowSize := 8 + 32 + 255 // Size of id + username + email
-	rowsPerPage := pageSize / rowSize
-	fmt.Printf("Calculated rows per page: %d\n", rowsPerPage)
+	// fmt.Printf("Calculated rows per page: %d\n", rowsPerPage)
 
 	buffer := make([]byte, pageSize)
 	// Here we would need to serialize the row into the buffer. This is a simple example and does not handle all edge cases.
@@ -70,16 +73,29 @@ func processInsertCommand(input string) {
 	copy(buffer[40:295], row.email[:])
 	// Store this row into the table
 	// Before that I think encoding will be necessary.
-	fmt.Printf("Parsed INSERT command with values: %v\n", values)
 
+	fmt.Printf("Parsed INSERT command with values: %v\n", values)
+	return buffer
 }
 
+func rowPosition(table *Table, rowNum int) []byte {
+	pageSize := 4096
+	rowSize := 8 + 32 + 255 // Size of id + username + email
+	rowsPerPage := pageSize / rowSize
+	pageNum := rowNum / rowsPerPage
+	byteOffset := (rowNum % rowsPerPage) * rowSize
+	if table.pages[pageNum] == nil {
+		table.pages[pageNum] = make([]byte, pageSize)
+	}
+	return table.pages[pageNum][byteOffset:byteOffset+rowSize] // This is the position of the row in the table
+}
 
 /* This is the main entry point for the StorageEngine.
    The goal now is to be able to properly de-markate the meta commands
    and everything else will be SQL command.
 */
 func main() {
+	var table Table
     scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("Welcome to StorageEngine\n")
 	for {
@@ -101,7 +117,14 @@ func main() {
 					processSelectCommand(input)
 				} else if strings.HasPrefix(strings.ToUpper(input), "INSERT") {
 					// Start processing the INSERT command function.
-					processInsertCommand(input)
+					row := processInsertCommand(input)
+					if len(row) == 0 {
+						fmt.Println("Failed to parse INSERT command.")
+						continue
+					}
+					slot := rowPosition(&table, table.numRows)
+					copy(slot, row)
+					table.numRows++
 				} else {
 					fmt.Println("Unrecognized SQL command:", input)
 				}
