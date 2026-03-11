@@ -25,8 +25,18 @@ func isMetaCommand(input string) bool {
 }
 
 
-func processSelectCommand(input string) {	// This is a very basic parser for the SELECT command. It does not handle all cases and is just for demonstration.
+func processSelectCommand(input string, table *Table) {	
+	// This is a very basic parser for the SELECT command. It does not handle all cases and is just for demonstration.
 	// It assumes the format: SELECT column1, column2 table_name WHERE condition
+	// fmt.Printf("SELECT part: %s\n", selectPart)
+	fmt.Printf("Table rows %d\n", table.numRows)
+	for i := 0; i < table.numRows; i++ {
+		slot := rowPosition(table, i)
+		id := string(slot[0:8])
+		username := string(slot[8:40])
+		email := string(slot[40:295])
+		fmt.Printf("Row %d: id=%s, username=%s, email=%s\n", i+1, id, username, email)
+	}
 	fmt.Printf("Parsed SELECT command: \n")
 }
 
@@ -114,7 +124,7 @@ func main() {
 				// Check if the input contains valid SQL commands SELECT, INSERT for now, upper or lower case.
 				if strings.HasPrefix(strings.ToUpper(input), "SELECT") {
 					// Start processing the SELECT command using a simple parser.
-					processSelectCommand(input)
+					processSelectCommand(input, &table)
 				} else if strings.HasPrefix(strings.ToUpper(input), "INSERT") {
 					// Start processing the INSERT command function.
 					row := processInsertCommand(input)
