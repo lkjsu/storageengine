@@ -88,6 +88,25 @@ func processInsertCommand(input string) []byte {
 	return buffer
 }
 
+func saveToFile(table *Table) {
+	// We need to determine which pages need to be pasted to file.
+	pageSize := 4096
+	rowSize := 8 + 32 + 255
+	rowsPerPage := pageSize / rowSize
+	pages := ( table.numRows + rowsPerPage - 1 ) / rowsPerPage
+	file, err := os.Create("file.db") // For read access.
+	if err != nil {
+		fmt.Print(err)
+	}
+	defer file.Close()
+	for i := 0; i < pages; i++ {
+		if (table.pages[i] != nil ) {
+			file.Write(table.pages[i])
+		}
+		
+	}
+}
+
 func rowPosition(table *Table, rowNum int) []byte {
 	pageSize := 4096
 	rowSize := 8 + 32 + 255 // Size of id + username + email
@@ -114,6 +133,7 @@ func main() {
 		input := strings.TrimSpace(scanner.Text())
         if isMetaCommand(input) {
 			if input == ".exit" {
+				saveToFile(&table)
 				fmt.Println("Exiting StorageEngine. Goodbye!")
 				break
 			} else {
