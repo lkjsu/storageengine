@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -16,7 +19,7 @@ type Row struct {
 
 type Table struct {
 	numRows int
-	pages    [100][]byte
+	pages   [100][]byte
 }
 
 /* Write a function that can distinguish between meta commands and SQL commands */
@@ -24,8 +27,7 @@ func isMetaCommand(input string) bool {
 	return strings.HasPrefix(input, ".")
 }
 
-
-func processSelectCommand(input string, table *Table) {	
+func processSelectCommand(input string, table *Table) {
 	// This is a very basic parser for the SELECT command. It does not handle all cases and is just for demonstration.
 	// It assumes the format: SELECT column1, column2 table_name WHERE condition
 	// fmt.Printf("SELECT part: %s\n", selectPart)
@@ -37,7 +39,7 @@ func processSelectCommand(input string, table *Table) {
 		email := string(slot[40:295])
 		fmt.Printf("Row %d: id=%s, username=%s, email=%s\n", i+1, id, username, email)
 	}
-	fmt.Printf("Parsed SELECT command: \n")
+	fmt.Errorf("Parsed SELECT command \n")
 }
 
 func processInsertCommand(input string) []byte {
@@ -93,18 +95,66 @@ func saveToFile(table *Table) {
 	pageSize := 4096
 	rowSize := 8 + 32 + 255
 	rowsPerPage := pageSize / rowSize
-	pages := ( table.numRows + rowsPerPage - 1 ) / rowsPerPage
+	pages := (table.numRows + rowsPerPage - 1) / rowsPerPage
 	file, err := os.Create("file.db") // For read access.
 	if err != nil {
 		fmt.Print(err)
 	}
 	defer file.Close()
+
+	header := new(bytes.Buffer)
+	binary.Write(header, binary.BigEndian, int64(table.numRows))
+	file.Write(header.Bytes())
 	for i := 0; i < pages; i++ {
-		if (table.pages[i] != nil ) {
+		if table.pages[i] != nil {
 			file.Write(table.pages[i])
 		}
-		
+
 	}
+}
+
+func loadTableFromFile(table *Table) {
+	file, err := os.Open("file.db")
+	if err != nil {
+		fmt.Print(err)
+	}
+
+	defer file.Close()
+
+	pageNumber := 0
+	header := make([]byte, 8)
+	n, err := io.ReadFull(file, header)
+	if err != nil {
+		fmt.Errorf("Could not read header\n")
+	}
+	fmt.Errorf("Read %d bytes from header\n", n)
+	var rows int64
+	if n > 0 {
+		buf := bytes.NewReader(header)
+		binary.Read(buf, binary.BigEndian, &rows)
+	} else {
+		fmt.Print("No database initialized!\n")
+		return
+	}
+
+	// fmt.Errorf(header, table.numRows)
+
+	table.numRows = int(rows)
+	for {
+		buffer := make([]byte, 4096)
+		n, err := file.Read(buffer)
+		if n > 0 {
+			table.pages[pageNumber] = make([]byte, 4096)
+			copy(table.pages[pageNumber][:], buffer[:n])
+			pageNumber++
+		}
+
+		if err == io.EOF {
+			break
+		}
+		fmt.Printf("Number Bytes read: %d\n", n)
+	}
+
 }
 
 func rowPosition(table *Table, rowNum int) []byte {
@@ -116,22 +166,25 @@ func rowPosition(table *Table, rowNum int) []byte {
 	if table.pages[pageNum] == nil {
 		table.pages[pageNum] = make([]byte, pageSize)
 	}
-	return table.pages[pageNum][byteOffset:byteOffset+rowSize] // This is the position of the row in the table
+	return table.pages[pageNum][byteOffset : byteOffset+rowSize] // This is the position of the row in the table
 }
 
-/* This is the main entry point for the StorageEngine.
-   The goal now is to be able to properly de-markate the meta commands
-   and everything else will be SQL command.
+/*
+This is the main entry point for the StorageEngine.
+
+	The goal now is to be able to properly de-markate the meta commands
+	and everything else will be SQL command.
 */
 func main() {
 	var table Table
-    scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("Welcome to StorageEngine\n")
+	loadTableFromFile(&table)
 	for {
 		fmt.Print("> ")
-        scanner.Scan()
+		scanner.Scan()
 		input := strings.TrimSpace(scanner.Text())
-        if isMetaCommand(input) {
+		if isMetaCommand(input) {
 			if input == ".exit" {
 				saveToFile(&table)
 				fmt.Println("Exiting StorageEngine. Goodbye!")
@@ -160,5 +213,5 @@ func main() {
 				}
 			}
 		}
-    }
+	}
 }
